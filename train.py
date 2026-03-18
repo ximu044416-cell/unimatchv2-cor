@@ -18,17 +18,15 @@ from models.dinov2_unet import DINOUNet
 from data.dataset import UniMatchDataset, get_split_indices
 from utils.losses import FocalTverskyLoss, BoundaryDoULoss
 
-# ================= 0. Run 11 (CutMix Revolution) =================
+# ================= 0. Run 12.5 (Ultimate V9 Engine) =================
 TOTAL_EPOCHS = 1500
-PATIENCE = 250
+PATIENCE = 500  # 给 B-DoU 足够的耐心雕刻边缘
 LR_HEAD = 1e-5
-LR_BACKBONE = 1e-6
+LR_BACKBONE = 5e-6  # 解冻后提供充足动能
 LLRD_DECAY = 0.90
 
 
 # ================= 1. 策略控制 =================
-
-# 🔥 无监督权重的 Warm-up 预热机制
 def get_current_unsup_weight(epoch):
     warmup_epochs = 50
     max_weight = config.UNLABELED_LOSS_WEIGHT
@@ -37,7 +35,6 @@ def get_current_unsup_weight(epoch):
     return max_weight
 
 
-# 🔥 EMA 动态升温策略
 def get_ema_alpha(epoch):
     base_alpha = 0.95
     target_alpha = 0.999
@@ -272,8 +269,8 @@ def train():
     device = torch.device(config.DEVICE)
     tb_writer = SummaryWriter(log_dir=os.path.join(config.OUTPUT_DIR, 'tensorboard_logs'))
 
-    logging.info(f"🚀 启动全新的冠状面大一统训练 (1500 Epochs)！")
-    logging.info(f"⚙️ Config: Two-Stage PEFT | Dynamic Loss | ACT | CutMix")
+    logging.info(f"🚀 启动终极之战: 满血热重启 | 错位交接版 (1500 Epochs)！")
+    logging.info(f"⚙️ Config: LLRD 热重启 | EarlyStopping 重置 | B-DoU 终极压榨")
 
     train_l_files, train_u_files, val_files = get_split_indices()
     ds_l = UniMatchDataset(train_l_files, mode='labeled')
@@ -293,7 +290,6 @@ def train():
     teacher_model = DINOUNet(local_path=config.PRETRAINED_PATH, num_classes=config.NUM_CLASSES).to(device)
     teacher_model.load_state_dict(model.state_dict())
 
-    # 🔥 Teacher 模型绝对冻结，且始终处于 eval 模式！
     for param in teacher_model.parameters(): param.requires_grad = False
     teacher_model.eval()
 
@@ -301,74 +297,61 @@ def train():
     best_model_path = os.path.join(config.OUTPUT_DIR, "best_model.pth")
     early_stopping = EarlyStopping(patience=PATIENCE, save_path=best_model_path)
 
-    # ================= 🔥 挂载全套武器库 =================
     criterion_ce = nn.CrossEntropyLoss(ignore_index=255)
     criterion_tversky = FocalTverskyLoss(n_classes=config.NUM_CLASSES, alpha=0.3, beta=0.7, gamma=1.33,
                                          dynamic_beta=False)
-    criterion_bdou = BoundaryDoULoss(kernel_size=3)  # 专砍边缘
+    criterion_bdou = BoundaryDoULoss(kernel_size=3)
     criterion_u_ce = nn.CrossEntropyLoss(reduction='none')
 
-    # 初始化优化器 (供第一阶段使用)
-    for param in model.encoder.parameters(): param.requires_grad = False  # 第一阶段默认冻结
+    for param in model.encoder.parameters(): param.requires_grad = False
     optimizer = optim.AdamW(model.parameters(), lr=LR_HEAD, weight_decay=config.WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=TOTAL_EPOCHS, eta_min=1e-8)
 
     iter_u = iter(dl_u)
-
-    # 🔥 ACT: 初始化水肿类别的全局置信度用于动态阈值
     global_prob_val = torch.ones(1, device=device) * 0.5
-
     current_stage = 1
 
     for epoch in range(TOTAL_EPOCHS):
 
-        # ================= 🔥 战略司令部：两阶段控制台 =================
         if epoch < 150:
-            # 【第一阶段：打地基】(0 - 149 轮)
             model.train()
-            # 必须显式锁死 Backbone 的 BatchNorm/LayerNorm！
             model.encoder.eval()
-            # 🚫 修复隐患2：Teacher 必须死死锁在 eval！
             teacher_model.eval()
 
-            # 三阶 Loss 分配
+            # 🔥 错位交接：提前让 B-DoU 给解码器预热，防解冻震荡
             if epoch < 100:
                 w_ce, w_ft, w_bd = 0.5, 1.0, 0.0
             else:
                 w_ce, w_ft, w_bd = 0.2, 0.8, 0.5
 
         else:
-            # 【第二阶段：全参微调】(150 轮及以后)
             if current_stage == 1:
-                logging.info(f"🔓 [Epoch {epoch}] 阶段二开启：解冻 DINOv2 Backbone，启用 LLRD 微调！")
+                logging.info(f"🔓 [Epoch {epoch}] 除颤启动：执行热重启，释放 Backbone，重置早停！")
                 for param in model.encoder.parameters(): param.requires_grad = True
 
-                # 重建包含 Backbone 的 LLRD 优化器
                 param_groups = get_llrd_params(model, LR_BACKBONE, LR_HEAD, config.WEIGHT_DECAY, decay_rate=LLRD_DECAY)
                 optimizer = optim.AdamW(param_groups)
-                # Scheduler 需要重置，否则接不上之前的步数
-                scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=TOTAL_EPOCHS, eta_min=1e-8)
-                # 快进 scheduler 到当前 epoch
-                for _ in range(epoch): scheduler.step()
+
+                # 满血启动剩下的 Epochs
+                scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=(TOTAL_EPOCHS - 150), eta_min=1e-8)
+
+                # 强行拔掉第一阶段的“虚高分”插头
+                early_stopping.best_dice = 0.0
+                early_stopping.counter = 0
+                logging.info("♻️ EarlyStopping 已清零！给 B-DoU 留出充足打磨空间！")
 
                 current_stage = 2
 
             model.train()
-            # 🚫 修复隐患2：Teacher 必须死死锁在 eval！
             teacher_model.eval()
-            # 此时移除了 model.encoder.eval()，Backbone 回归正常训练！
 
-            # 三阶 Loss 分配 (300以后进入冲刺)
             if epoch < 300:
                 w_ce, w_ft, w_bd = 0.2, 0.8, 0.5
             else:
                 w_ce, w_ft, w_bd = 0.1, 0.5, 1.5
 
-        # ================= 动态系数获取 =================
         current_unsup_weight = get_current_unsup_weight(epoch)
         current_ema_alpha = get_ema_alpha(epoch)
-
-        # 🛡️ 修复隐患1：给 ACT 加入保底阈值 0.40，防止被背景噪声带偏
         current_thresh = max(global_prob_val.item(), 0.40)
 
         metrics_meter = {'loss': 0, 'sup': 0, 'unsup': 0}
@@ -392,7 +375,6 @@ def train():
 
             with autocast('cuda'):
                 pred_l = model(img_l)
-
                 probs_l = torch.softmax(pred_l, dim=1)
 
                 loss_ce = criterion_ce(pred_l, mask_l)
@@ -408,14 +390,12 @@ def train():
                         probs_u_w = torch.softmax(pred_u_w, dim=1)
                         max_probs, pseudo_label = torch.max(probs_u_w, dim=1)
 
-                        # 🔥 ACT: 动态更新水肿类别的全局置信度
                         prob_edema = probs_u_w[:, 1, :, :]
                         mask_edema = (pseudo_label == 1)
                         if mask_edema.any():
                             current_batch_conf = prob_edema[mask_edema].mean()
                             global_prob_val = global_prob_val * 0.99 + current_batch_conf * 0.01
 
-                        # 使用追踪到的自适应阈值过滤伪标签
                         mask_conf = max_probs.ge(current_thresh).float()
 
                     img_u_s_cat = torch.cat((img_u_s1, img_u_s2), dim=0)

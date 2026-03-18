@@ -18,7 +18,7 @@ UNLABEL_DIR = DATA_ROOT / "unlabel"
 PRETRAINED_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "dinov2_vits14.pth")
 
 # 输出路径 (Run 11: 冠状面大一统战役)
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "logs", "UniMatch_Cor_Run2")
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "logs", "UniMatch_Cor_Run3")
 
 # ================= 2. 数据参数 (Data) =================
 # 保持 518，兼容性最强，极个别超大框将进行中心裁剪
