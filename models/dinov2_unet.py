@@ -3,12 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-# 🔥 [修改 1] 导入 config，而不是写死 IMG_SIZE
+# 🔥 [修改 1] 导入 config，动态读取 Base 的维度 (768) 和 IMG_SIZE
 from configs import config
-
-# DINOv2-Small 的特征维度是 384 (Base 是 768, Large 是 1024)
-# 如果你确定只用 Small，这里写 384 没问题
-EMBED_DIM = 384
+EMBED_DIM = config.EMBED_DIM
 
 
 class DINOv2Encoder(nn.Module):
@@ -19,10 +16,10 @@ class DINOv2Encoder(nn.Module):
     def __init__(self, local_path):
         super().__init__()
 
-        # 1. 加载定义
+        # 1. 加载定义: 从 Small (vits14) 升级到 Base (vitb14)
         try:
             # 这一步只加载结构，不加载权重
-            self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vits14', pretrained=False)
+            self.backbone = torch.hub.load('facebookresearch/dinov2', 'dinov2_vitb14', pretrained=False)
         except Exception as e:
             print(f"❌ 模型定义加载失败: {e}")
             raise e
@@ -31,13 +28,14 @@ class DINOv2Encoder(nn.Module):
         print(f"📥 Loading weights from {local_path}...")
         try:
             state_dict = torch.load(local_path, map_location='cpu')
-            self.backbone.load_state_dict(state_dict)
-            print("✅ Weights loaded successfully.")
+            # 🔥 [修改 2 - 导师级安全锁] 显式开启 strict=True，防止 Base 和 Small 权重张冠李戴
+            self.backbone.load_state_dict(state_dict, strict=True)
+            print("✅ Weights loaded successfully (Strict Mode ON).")
         except FileNotFoundError:
             print(f"❌ 错误: 找不到文件 {local_path}，请检查路径！")
             raise FileNotFoundError
 
-        # 3. 严格冻结
+        # 3. 严格冻结 (出厂物理锁)
         for param in self.backbone.parameters():
             param.requires_grad = False
         print("❄️ Encoder Frozen (Strict Mode).")
@@ -62,7 +60,7 @@ class DINOAdapter(nn.Module):
 
     def __init__(self):
         super().__init__()
-        # 1x1 卷积调整通道数
+        # 1x1 卷积调整通道数，自动适应 EMBED_DIM (768)
         self.conv1 = nn.Conv2d(EMBED_DIM, 64, 1)
         self.conv2 = nn.Conv2d(EMBED_DIM, 128, 1)
         self.conv3 = nn.Conv2d(EMBED_DIM, 256, 1)
@@ -102,7 +100,7 @@ class DoubleConv(nn.Module):
         self.double_conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            # 🔥 [修改 2] 为了训练稳定性，建议去掉 inplace=True
+            # 为了训练稳定性，保留了你原本去掉 inplace=True 的优秀设置
             nn.ReLU(inplace=False),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
@@ -114,7 +112,6 @@ class DoubleConv(nn.Module):
 
 
 class DINOUNet(nn.Module):
-    # 🔥 [修改 3] init 参数使用 config 里的默认值
     def __init__(self, local_path=config.PRETRAINED_PATH, num_classes=config.NUM_CLASSES):
         super().__init__()
 
@@ -131,8 +128,7 @@ class DINOUNet(nn.Module):
         self.up3 = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         self.conv3 = DoubleConv(128 + 64, 64)
 
-        # 🔥 [修改 4] 动态读取 Config 中的 IMG_SIZE
-        # 这样如果你改了 config.py，这里会自动同步，不会报错
+        # 动态读取 Config 中的 IMG_SIZE
         self.final_up = nn.Upsample(size=(config.IMG_SIZE, config.IMG_SIZE), mode='bilinear', align_corners=False)
 
         self.final_conv = nn.Conv2d(64, num_classes, kernel_size=1)

@@ -18,13 +18,6 @@ from models.dinov2_unet import DINOUNet
 from data.dataset import UniMatchDataset, get_split_indices
 from utils.losses import FocalTverskyLoss, BoundaryDoULoss
 
-# ================= 0. Run 12.5 (Ultimate V9 Engine) =================
-TOTAL_EPOCHS = 1500
-PATIENCE = 500  # 给 B-DoU 足够的耐心雕刻边缘
-LR_HEAD = 1e-5
-LR_BACKBONE = 5e-6  # 解冻后提供充足动能
-LLRD_DECAY = 0.90
-
 
 # ================= 1. 策略控制 =================
 def get_current_unsup_weight(epoch):
@@ -36,7 +29,8 @@ def get_current_unsup_weight(epoch):
 
 
 def get_ema_alpha(epoch):
-    base_alpha = 0.95
+    # 🔥 [修复] 收紧 EMA 动量门槛，保护教师模型
+    base_alpha = 0.99
     target_alpha = 0.999
     warmup_epochs = 150
     if epoch < warmup_epochs:
@@ -191,6 +185,11 @@ def get_llrd_params(model, lr_backbone, lr_head, weight_decay, decay_rate=0.90):
             groups.append({'params': layer_params[i], 'lr': lr_backbone * scale, 'weight_decay': weight_decay})
     if len(embed_params) > 0:
         groups.append({'params': embed_params, 'lr': lr_backbone * (decay_rate ** 12), 'weight_decay': weight_decay})
+
+    # 🔥 [终极修复 1] 将计算好的目标 LR 作为 'target_lr' 写入字典！杜绝后续索引反推越界！
+    for group in groups:
+        group['target_lr'] = group['lr']
+
     return groups
 
 
@@ -269,20 +268,26 @@ def train():
     device = torch.device(config.DEVICE)
     tb_writer = SummaryWriter(log_dir=os.path.join(config.OUTPUT_DIR, 'tensorboard_logs'))
 
-    logging.info(f"🚀 启动终极之战: 满血热重启 | 错位交接版 (1500 Epochs)！")
-    logging.info(f"⚙️ Config: LLRD 热重启 | EarlyStopping 重置 | B-DoU 终极压榨")
+    logging.info(f"🚀 启动终极之战: Base 巨兽 | 纯净数据集 | 动静分离架构")
+    logging.info(f"⚙️ Config: 15轮极缓预热 | EMA 0.99 | LLRD {config.LLRD_DECAY} | 梯度累加保护")
+
+    # 🔥 [终极修复 2] 梯度累加，防止 Base 模型 OOM
+    ACCUM_STEPS = 2
+    # 物理 batch size 减半（如 config 里是 4，这里物理就是 2），跑 2 步合并 1 次梯度
+    physical_batch_size = max(1, config.BATCH_SIZE // ACCUM_STEPS)
 
     train_l_files, train_u_files, val_files = get_split_indices()
-    ds_l = UniMatchDataset(train_l_files, mode='labeled')
-    dl_l = DataLoader(ds_l, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True,
+
+    dl_l = DataLoader(UniMatchDataset(train_l_files, mode='labeled'),
+                      batch_size=physical_batch_size, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True,
                       drop_last=True)
 
-    ds_u = UniMatchDataset(train_u_files, mode='unlabeled')
-    dl_u = DataLoader(ds_u, batch_size=config.BATCH_SIZE, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True,
+    dl_u = DataLoader(UniMatchDataset(train_u_files, mode='unlabeled'),
+                      batch_size=physical_batch_size, shuffle=True, num_workers=config.NUM_WORKERS, pin_memory=True,
                       drop_last=True)
 
-    ds_val = UniMatchDataset(val_files, mode='val')
-    dl_val = DataLoader(ds_val, batch_size=1, shuffle=False, num_workers=2)
+    dl_val = DataLoader(UniMatchDataset(val_files, mode='val'),
+                        batch_size=1, shuffle=False, num_workers=2)
 
     logging.info(f"📥 Loading Pretrained DINOv2 Weights: {config.PRETRAINED_PATH}")
     model = DINOUNet(local_path=config.PRETRAINED_PATH, num_classes=config.NUM_CLASSES).to(device)
@@ -295,7 +300,7 @@ def train():
 
     scaler = GradScaler('cuda')
     best_model_path = os.path.join(config.OUTPUT_DIR, "best_model.pth")
-    early_stopping = EarlyStopping(patience=PATIENCE, save_path=best_model_path)
+    early_stopping = EarlyStopping(patience=config.PATIENCE, save_path=best_model_path)
 
     criterion_ce = nn.CrossEntropyLoss(ignore_index=255)
     criterion_tversky = FocalTverskyLoss(n_classes=config.NUM_CLASSES, alpha=0.3, beta=0.7, gamma=1.33,
@@ -304,21 +309,22 @@ def train():
     criterion_u_ce = nn.CrossEntropyLoss(reduction='none')
 
     for param in model.encoder.parameters(): param.requires_grad = False
-    optimizer = optim.AdamW(model.parameters(), lr=LR_HEAD, weight_decay=config.WEIGHT_DECAY)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=TOTAL_EPOCHS, eta_min=1e-8)
+
+    # 第一阶段：用 config.LR_HEAD 给解码器极其充足的火力
+    optimizer = optim.AdamW(model.parameters(), lr=config.LR_HEAD, weight_decay=config.WEIGHT_DECAY)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.TOTAL_EPOCHS, eta_min=1e-8)
 
     iter_u = iter(dl_u)
     global_prob_val = torch.ones(1, device=device) * 0.5
     current_stage = 1
 
-    for epoch in range(TOTAL_EPOCHS):
+    for epoch in range(config.TOTAL_EPOCHS):
 
         if epoch < 150:
             model.train()
             model.encoder.eval()
             teacher_model.eval()
 
-            # 🔥 错位交接：提前让 B-DoU 给解码器预热，防解冻震荡
             if epoch < 100:
                 w_ce, w_ft, w_bd = 0.5, 1.0, 0.0
             else:
@@ -326,20 +332,16 @@ def train():
 
         else:
             if current_stage == 1:
-                logging.info(f"🔓 [Epoch {epoch}] 除颤启动：执行热重启，释放 Backbone，重置早停！")
+                logging.info(f"🔓 [Epoch {epoch}] 除颤启动：释放 Base Backbone！启动 15 轮线性极缓预热！")
                 for param in model.encoder.parameters(): param.requires_grad = True
 
-                param_groups = get_llrd_params(model, LR_BACKBONE, LR_HEAD, config.WEIGHT_DECAY, decay_rate=LLRD_DECAY)
+                param_groups = get_llrd_params(model, config.LR_BACKBONE, config.LR_HEAD, config.WEIGHT_DECAY,
+                                               decay_rate=config.LLRD_DECAY)
                 optimizer = optim.AdamW(param_groups)
 
-                # 满血启动剩下的 Epochs
-                scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=(TOTAL_EPOCHS - 150), eta_min=1e-8)
-
-                # 强行拔掉第一阶段的“虚高分”插头
                 early_stopping.best_dice = 0.0
                 early_stopping.counter = 0
-                logging.info("♻️ EarlyStopping 已清零！给 B-DoU 留出充足打磨空间！")
-
+                logging.info("♻️ EarlyStopping 已清零！给 Base 留出充足打磨空间！")
                 current_stage = 2
 
             model.train()
@@ -348,16 +350,35 @@ def train():
             if epoch < 300:
                 w_ce, w_ft, w_bd = 0.2, 0.8, 0.5
             else:
-                w_ce, w_ft, w_bd = 0.1, 0.5, 1.5
+                w_ce, w_ft, w_bd = 0.1, 0.5, 1.0  # B-DoU 温和化
+
+            # 🔥 [终极修复 3] 预热逻辑提拔到 Batch 循环之前！绝不在循环中途乱降学习率！
+            if 150 <= epoch < 165:
+                warmup_ratio = (epoch - 150 + 1) / 15.0
+                for param_group in optimizer.param_groups:
+                    # 安全读取我们挂在字典里的 target_lr
+                    target_lr = param_group.get('target_lr', param_group['lr'])
+                    param_group['lr'] = 1e-8 + warmup_ratio * (target_lr - 1e-8)
+
+                if epoch == 164:
+                    # 预热的最后一天，挂载余弦退火，移交指挥权
+                    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=(config.TOTAL_EPOCHS - 165),
+                                                                     eta_min=1e-8)
+                    logging.info(f"🚀 [Epoch {epoch}] 15 轮极缓预热结束！平稳移交 CosineAnnealingLR！")
 
         current_unsup_weight = get_current_unsup_weight(epoch)
         current_ema_alpha = get_ema_alpha(epoch)
-        current_thresh = max(global_prob_val.item(), 0.40)
+
+        # 紧缩双重门槛
+        current_thresh = max(global_prob_val.item(), 0.60)
 
         metrics_meter = {'loss': 0, 'sup': 0, 'unsup': 0}
-        pbar = tqdm(dl_l, total=len(dl_l), desc=f"Ep {epoch + 1}/{TOTAL_EPOCHS}")
+        pbar = tqdm(dl_l, total=len(dl_l), desc=f"Ep {epoch + 1}/{config.TOTAL_EPOCHS}")
 
-        for batch_l in pbar:
+        # 梯度累加初始清零
+        optimizer.zero_grad()
+
+        for step, batch_l in enumerate(pbar):
             img_l, mask_l = batch_l
             img_l, mask_l = img_l.to(device), mask_l.to(device)
 
@@ -370,8 +391,6 @@ def train():
                 batch_u = next(iter_u)
             img_u_w, img_u_s1, img_u_s2 = batch_u
             img_u_w, img_u_s1, img_u_s2 = img_u_w.to(device), img_u_s1.to(device), img_u_s2.to(device)
-
-            optimizer.zero_grad()
 
             with autocast('cuda'):
                 pred_l = model(img_l)
@@ -407,12 +426,18 @@ def train():
                     loss_unsup = (loss_u_s1 + loss_u_s2) / 2.0
 
                 total_loss = loss_sup + current_unsup_weight * loss_unsup
+                # 累加缩放
+                loss_to_backward = total_loss / ACCUM_STEPS
 
-            scaler.scale(total_loss).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            # 反向传播 (缩放后)
+            scaler.scale(loss_to_backward).backward()
 
-            update_ema(model, teacher_model, alpha=current_ema_alpha)
+            # 🔥 梯度累加步数到达，或者达到整个 Epoch 的最后一个 Step
+            if (step + 1) % ACCUM_STEPS == 0 or (step + 1) == len(dl_l):
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
+                update_ema(model, teacher_model, alpha=current_ema_alpha)
 
             metrics_meter['loss'] += total_loss.item()
             metrics_meter['sup'] += loss_sup.item()
@@ -424,7 +449,13 @@ def train():
                 'Th': f"{current_thresh:.2f}"
             })
 
-        scheduler.step()
+        # 🔥 步进逻辑精细分离
+        if epoch < 150:
+            scheduler.step()
+        elif 150 <= epoch < 165:
+            pass  # 处于手动预热期，绝对不调用 scheduler
+        else:
+            scheduler.step()  # 165轮及以后，正常余弦退火
 
         avg_loss = metrics_meter['loss'] / len(dl_l)
         avg_sup = metrics_meter['sup'] / len(dl_l)

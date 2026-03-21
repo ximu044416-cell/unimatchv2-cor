@@ -42,7 +42,7 @@ def main():
     # 物理移动文件 (速度极快，不占用额外硬盘空间)
     print(f"🚚 正在将 {VAL_SIZE} 例移动到 val 验证集...")
     for case in val_cases:
-        shutil.move(str(case), str(VAL_DIR / case.name))
+        shutil.move(str(case), str(VAL_DIR / c
 
     print(f"🚚 正在将剩余 {len(train_cases)} 例移动到 train 训练集...")
     for case in train_cases:
