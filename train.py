@@ -12,6 +12,9 @@ from torch.amp import autocast, GradScaler
 from torch.utils.tensorboard import SummaryWriter
 from sklearn.metrics import roc_auc_score
 
+# 🔥 [RUN 5 策略 3] 导入 SWA 相关库
+from torch.optim.swa_utils import AveragedModel, update_bn
+
 # ================= 导入自定义模块 =================
 from configs import config
 from models.dinov2_unet import DINOUNet
@@ -28,14 +31,45 @@ def get_current_unsup_weight(epoch):
     return max_weight
 
 
-def get_ema_alpha(epoch):
-    # 🔥 [修复] 收紧 EMA 动量门槛，保护教师模型
+def get_cosine_threshold(epoch, total_epochs, max_thresh=0.60, min_thresh=0.45, start_decay_epoch=150):
+    """
+    🔥 [RUN 5 策略 1] 动态余弦阈值：前期严格防假阳，中后期平滑降至 0.45 扩张召回边界
+    """
+    if epoch < start_decay_epoch:
+        return max_thresh
+
+    # 在解冻后的深水区执行余弦衰减
+    progress = (epoch - start_decay_epoch) / max(1, total_epochs - start_decay_epoch)
+    cosine_decay = 0.5 * (1 + math.cos(math.pi * progress))
+    current_thresh = min_thresh + (max_thresh - min_thresh) * cosine_decay
+    return current_thresh
+
+
+def get_ema_alpha(epoch, current_unsup_loss=None, sma_unsup_loss=None):
+    """
+    🔥 [RUN 5 策略 2] LA-EMA: 损失感知的指数滑动平均机制
+    """
     base_alpha = 0.99
     target_alpha = 0.999
     warmup_epochs = 150
+
+    # 1. 基础的时间调度
     if epoch < warmup_epochs:
-        return base_alpha + (target_alpha - base_alpha) * (epoch / warmup_epochs)
-    return target_alpha
+        alpha = base_alpha + (target_alpha - base_alpha) * (epoch / warmup_epochs)
+    else:
+        alpha = target_alpha
+
+    # 2. LA-EMA 动态调节 (感知学生 Loss 震荡)
+    if current_unsup_loss is not None and sma_unsup_loss is not None and sma_unsup_loss > 0:
+        loss_ratio = current_unsup_loss / sma_unsup_loss
+        if loss_ratio > 1.2:
+            # 损失突增，发生震荡：立即将教师动量锁死为 1.0，拒绝吸收错误
+            alpha = 1.0
+        elif loss_ratio < 0.8:
+            # 损失平稳下降，学生表现极佳：适当敞开教师吸收窗口
+            alpha = max(0.95, alpha - 0.01)
+
+    return alpha
 
 
 # ================= 2. CutMix 核心函数 =================
@@ -186,7 +220,6 @@ def get_llrd_params(model, lr_backbone, lr_head, weight_decay, decay_rate=0.90):
     if len(embed_params) > 0:
         groups.append({'params': embed_params, 'lr': lr_backbone * (decay_rate ** 12), 'weight_decay': weight_decay})
 
-    # 🔥 [终极修复 1] 将计算好的目标 LR 作为 'target_lr' 写入字典！杜绝后续索引反推越界！
     for group in groups:
         group['target_lr'] = group['lr']
 
@@ -268,12 +301,9 @@ def train():
     device = torch.device(config.DEVICE)
     tb_writer = SummaryWriter(log_dir=os.path.join(config.OUTPUT_DIR, 'tensorboard_logs'))
 
-    logging.info(f"🚀 启动终极之战: Base 巨兽 | 纯净数据集 | 动静分离架构")
-    logging.info(f"⚙️ Config: 15轮极缓预热 | EMA 0.99 | LLRD {config.LLRD_DECAY} | 梯度累加保护")
+    logging.info(f"🚀 启动 RUN 5: 动态余弦阈值 | LA-EMA 避震 | SWA 后期平均")
 
-    # 🔥 [终极修复 2] 梯度累加，防止 Base 模型 OOM
     ACCUM_STEPS = 2
-    # 物理 batch size 减半（如 config 里是 4，这里物理就是 2），跑 2 步合并 1 次梯度
     physical_batch_size = max(1, config.BATCH_SIZE // ACCUM_STEPS)
 
     train_l_files, train_u_files, val_files = get_split_indices()
@@ -310,13 +340,19 @@ def train():
 
     for param in model.encoder.parameters(): param.requires_grad = False
 
-    # 第一阶段：用 config.LR_HEAD 给解码器极其充足的火力
     optimizer = optim.AdamW(model.parameters(), lr=config.LR_HEAD, weight_decay=config.WEIGHT_DECAY)
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config.TOTAL_EPOCHS, eta_min=1e-8)
 
     iter_u = iter(dl_u)
     global_prob_val = torch.ones(1, device=device) * 0.5
     current_stage = 1
+
+    # 🔥 [RUN 5 策略] 外部状态追踪器初始化
+    sma_unsup_loss = 0.0
+    avg_unsup = 0.0  # 杜绝第 0 轮 NameError
+
+    swa_model = AveragedModel(model)
+    SWA_START_EPOCH = config.TOTAL_EPOCHS - 50
 
     for epoch in range(config.TOTAL_EPOCHS):
 
@@ -350,32 +386,33 @@ def train():
             if epoch < 300:
                 w_ce, w_ft, w_bd = 0.2, 0.8, 0.5
             else:
-                w_ce, w_ft, w_bd = 0.1, 0.5, 1.0  # B-DoU 温和化
+                # 调低 B-DoU 惩罚，防止死磕边缘
+                w_ce, w_ft, w_bd = 0.1, 0.5, 0.7
 
-            # 🔥 [终极修复 3] 预热逻辑提拔到 Batch 循环之前！绝不在循环中途乱降学习率！
             if 150 <= epoch < 165:
                 warmup_ratio = (epoch - 150 + 1) / 15.0
                 for param_group in optimizer.param_groups:
-                    # 安全读取我们挂在字典里的 target_lr
                     target_lr = param_group.get('target_lr', param_group['lr'])
                     param_group['lr'] = 1e-8 + warmup_ratio * (target_lr - 1e-8)
 
                 if epoch == 164:
-                    # 预热的最后一天，挂载余弦退火，移交指挥权
                     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=(config.TOTAL_EPOCHS - 165),
                                                                      eta_min=1e-8)
                     logging.info(f"🚀 [Epoch {epoch}] 15 轮极缓预热结束！平稳移交 CosineAnnealingLR！")
 
         current_unsup_weight = get_current_unsup_weight(epoch)
-        current_ema_alpha = get_ema_alpha(epoch)
 
-        # 紧缩双重门槛
-        current_thresh = max(global_prob_val.item(), 0.60)
+        # 🔥 [RUN 5 策略 2] 获取 LA-EMA 动量
+        current_ema_alpha = get_ema_alpha(epoch, current_unsup_loss=avg_unsup if epoch > 0 else None,
+                                          sma_unsup_loss=sma_unsup_loss if epoch > 0 else None)
+
+        # 🔥 [RUN 5 策略 1] 获取余弦衰减阈值 (从 0.60 缓慢滑落至 0.45)
+        cosine_base_thresh = get_cosine_threshold(epoch, config.TOTAL_EPOCHS, max_thresh=0.60, min_thresh=0.45)
+        current_thresh = max(global_prob_val.item(), cosine_base_thresh)
 
         metrics_meter = {'loss': 0, 'sup': 0, 'unsup': 0}
         pbar = tqdm(dl_l, total=len(dl_l), desc=f"Ep {epoch + 1}/{config.TOTAL_EPOCHS}")
 
-        # 梯度累加初始清零
         optimizer.zero_grad()
 
         for step, batch_l in enumerate(pbar):
@@ -426,13 +463,10 @@ def train():
                     loss_unsup = (loss_u_s1 + loss_u_s2) / 2.0
 
                 total_loss = loss_sup + current_unsup_weight * loss_unsup
-                # 累加缩放
                 loss_to_backward = total_loss / ACCUM_STEPS
 
-            # 反向传播 (缩放后)
             scaler.scale(loss_to_backward).backward()
 
-            # 🔥 梯度累加步数到达，或者达到整个 Epoch 的最后一个 Step
             if (step + 1) % ACCUM_STEPS == 0 or (step + 1) == len(dl_l):
                 scaler.step(optimizer)
                 scaler.update()
@@ -446,25 +480,30 @@ def train():
             pbar.set_postfix({
                 'L': f"{total_loss.item():.3f}",
                 'U_W': f"{current_unsup_weight:.3f}",
-                'Th': f"{current_thresh:.2f}"
+                'Th': f"{current_thresh:.3f}",
+                'EMA': f"{current_ema_alpha:.4f}"
             })
 
-        # 🔥 步进逻辑精细分离
         if epoch < 150:
             scheduler.step()
         elif 150 <= epoch < 165:
-            pass  # 处于手动预热期，绝对不调用 scheduler
+            pass
         else:
-            scheduler.step()  # 165轮及以后，正常余弦退火
+            scheduler.step()
 
         avg_loss = metrics_meter['loss'] / len(dl_l)
         avg_sup = metrics_meter['sup'] / len(dl_l)
         avg_unsup = metrics_meter['unsup'] / len(dl_l)
 
+        # 🔥 [RUN 5 策略 2] 更新 LA-EMA 均线避震器
+        if epoch == 0:
+            sma_unsup_loss = avg_unsup
+        else:
+            sma_unsup_loss = 0.9 * sma_unsup_loss + 0.1 * avg_unsup
+
         tb_writer.add_scalar('Train/Loss_Total', avg_loss, epoch)
         tb_writer.add_scalar('Train/Loss_Sup', avg_sup, epoch)
         tb_writer.add_scalar('Train/Loss_Unsup', avg_unsup, epoch)
-
         tb_writer.add_scalar('Sys/Unsup_Weight', current_unsup_weight, epoch)
         tb_writer.add_scalar('Sys/EMA_Alpha', current_ema_alpha, epoch)
         tb_writer.add_scalar('Sys/Dynamic_Thresh', current_thresh, epoch)
@@ -510,8 +549,31 @@ def train():
             f"Patience: {patience_status}"
         )
 
+        # 🔥 [RUN 5 策略 3] SWA 权重捕获与终极验证
+        if epoch >= SWA_START_EPOCH:
+            swa_model.update_parameters(model)
+            logging.info(f"🔄 SWA 权重池已捕获 (Epoch {epoch})")
+
+            if epoch == config.TOTAL_EPOCHS - 1:
+                logging.info("🌟 触发 SWA 终极验证！正在更新 BN 统计量...")
+                # 让 SWA 模型在训练数据上空跑一遍，更新由于参数平均而错位的 Batch Norm 均值和方差
+                update_bn(dl_l, swa_model, device=device)
+
+                swa_val_metrics = validate_metrics_full(swa_model.module, dl_val, device, thresh=0.50)
+                logging.info(
+                    f"🏆 SWA 终极成绩 (Th=0.50): Dice {swa_val_metrics['dice']:.4f}, Rec {swa_val_metrics['recall']:.4f}, Prec {swa_val_metrics['precision']:.4f}")
+
+                torch.save(swa_model.module.state_dict(), os.path.join(config.OUTPUT_DIR, "best_model_SWA.pth"))
+
         if early_stopping.early_stop:
             logging.info("🛑 Early stopping triggered!")
+            # 同样，在提前早停时，也把收集到的 SWA 验证一下并保存
+            if epoch >= SWA_START_EPOCH:
+                logging.info("🌟 触发 SWA 终极验证 (早停触发)...")
+                update_bn(dl_l, swa_model, device=device)
+                swa_val_metrics = validate_metrics_full(swa_model.module, dl_val, device, thresh=0.50)
+                logging.info(f"🏆 SWA 终极成绩 (Th=0.50): Dice {swa_val_metrics['dice']:.4f}")
+                torch.save(swa_model.module.state_dict(), os.path.join(config.OUTPUT_DIR, "best_model_SWA.pth"))
             break
 
         if (epoch + 1) % 20 == 0:
