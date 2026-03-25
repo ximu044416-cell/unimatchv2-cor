@@ -18,7 +18,7 @@ UNLABEL_DIR = DATA_ROOT / "unlabel"
 PRETRAINED_PATH = os.path.join(PROJECT_ROOT, "checkpoints", "dinov2_vitb14_pretrain.pth")
 
 # 输出路径 (Run 4: YOLO 靶区纯净版 + Base 巨兽)
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "logs", "UniMatch_Cor_Run5")
+OUTPUT_DIR = os.path.join(PROJECT_ROOT, "logs", "UniMatch_Cor_Run6")
 
 # ================= 2. 数据参数 (Data) =================
 # 保持 518，兼容性最强，结合 dataset.py 会自动进行黑边 Letterbox 填充

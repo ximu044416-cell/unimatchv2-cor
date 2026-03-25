@@ -5,7 +5,6 @@ import math
 
 # 🔥 [修改 1] 导入 config，动态读取 Base 的维度 (768) 和 IMG_SIZE
 from configs import config
-
 EMBED_DIM = config.EMBED_DIM
 
 
@@ -16,19 +15,6 @@ class DINOv2Encoder(nn.Module):
 
     def __init__(self, local_path):
         super().__init__()
-
-        # 🔥 [战术武器] 1x1 卷积适配器：将 4 通道降维回 3 通道
-        self.stem = nn.Conv2d(4, 3, kernel_size=1, bias=True)
-
-        # 🔥 [神盾级安全锁] 恒等映射初始化 (Identity Initialization)
-        with torch.no_grad():
-            self.stem.weight.zero_()
-            self.stem.bias.zero_()
-            # 前 3 个通道设为 1:1 映射 (放行原始 MRI 信号)
-            for i in range(3):
-                self.stem.weight[i, i, 0, 0] = 1.0
-            # 第 4 个通道 (MedSAM 概率图) 的权重保持为 0，等待梯度安全唤醒
-            print("🛡️ 四通道神盾已激活！(恒等映射初始化完毕)")
 
         # 1. 加载定义: 从 Small (vits14) 升级到 Base (vitb14)
         try:
@@ -50,15 +36,11 @@ class DINOv2Encoder(nn.Module):
             raise FileNotFoundError
 
         # 3. 严格冻结 (出厂物理锁)
-        # 注意：只冻结 DINOv2，不冻结 self.stem！
         for param in self.backbone.parameters():
             param.requires_grad = False
         print("❄️ Encoder Frozen (Strict Mode).")
 
     def forward(self, x):
-        # 先经过降维打击，从 (B, 4, H, W) 变回 (B, 3, H, W)
-        x = self.stem(x)
-
         # 提取 [2, 5, 8, 11] 层
         return self.backbone.get_intermediate_layers(
             x, n=[2, 5, 8, 11], return_class_token=False
