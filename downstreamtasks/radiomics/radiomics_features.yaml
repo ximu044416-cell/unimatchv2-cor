@@ -1,0 +1,22 @@
+imageType:
+  Original: {}
+  LoG:
+    sigma: [2.0, 3.0, 4.0, 5.0]
+  Wavelet: {}
+
+featureClass:
+  shape:
+  firstorder:
+  glcm:
+  glrlm:
+  glszm:
+  gldm:
+
+setting:
+  normalize: false
+  resampledPixelSpacing: [1.0, 1.0, 1.0]
+  interpolator: 'sitkBSpline'
+  correctMask: true
+  binWidth: 0.1
+  force2D: false
+  padDistance: 10
