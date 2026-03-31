@@ -88,10 +88,13 @@ def calculate_net_benefit(y_true, y_prob, thresholds):
 
 # ================= 核心流水线 =================
 def run_ultimate_blind_test():
-    print("🚀 启动 Step 6: 终极双轨盲测大考 (GT vs Pred)...\n")
+    print("🚀 启动 Step 6: 终极多轨盲测大考 (自适应样本对齐版)...\n")
     WORK_DIR = r"F:\radiomics"
+    PRED_DIR = r"F:\check"
 
-    # ---------------- 1. 时光回溯：重建 Train 模型并锁定尤登指数 ----------------
+    target_thresholds = ["065", "070", "075"]
+
+    # ---------------- 1. 重建 Train 模型并锁定尤登指数 ----------------
     print("🔒 正在读取 Train 数据，重构模型并提取冻结参数...")
     df_train_clinical = pd.read_excel(os.path.join(WORK_DIR, "clinical_info_train.xlsx"))
     df_train_clinical = df_train_clinical.rename(columns={'label': 'Label'})
@@ -111,7 +114,6 @@ def run_ultimate_blind_test():
     y_train = df_train['Label'].values
     train_scaler = joblib.load(os.path.join(WORK_DIR, "train_scaler.pkl"))
 
-    # 绝对禁止重新 fit LASSO！直接硬编码确切权重
     lasso_intercept = 0.3521
     lasso_weights = {
         'original_shape_Sphericity': -0.0342,
@@ -128,10 +130,8 @@ def run_ultimate_blind_test():
     feature_cols_all = [c for c in df_train_features.columns if c != 'Patient_ID']
     X_train_scaled = pd.DataFrame(train_scaler.transform(df_train[feature_cols_all]), columns=feature_cols_all)
 
-    # 严格执行常量乘法计算 Train 的 Rad_score
     df_train['Rad_score'] = lasso_intercept + np.dot(X_train_scaled[selected_features], lasso_coefs)
 
-    # 极简全明星阵容，剔除阵亡变量
     clinical_vars = ['ESR', 'Disease_Duration_Category', 'Rad_score']
     X_train_clinical = sm.add_constant(df_train[clinical_vars])
     train_model = sm.Logit(y_train, X_train_clinical).fit(disp=False)
@@ -140,157 +140,176 @@ def run_ultimate_blind_test():
     fpr_train, tpr_train, thr_train = roc_curve(y_train, prob_train)
     auc_train = auc(fpr_train, tpr_train)
 
-    # 冻结截断值 (Youden Index)
     youden_idx = np.argmax(tpr_train - fpr_train)
     locked_cutoff = thr_train[youden_idx]
     print(f"   => ⚔️ Train 模型重构成功！AUC: {auc_train:.3f}")
     print(f"   => 🛑 绝对冻结：最佳临床概率截断值 (Cutoff) 锁定为 {locked_cutoff:.4f}")
 
-    # ---------------- 2. 测试集数据准备 (绝对隔离) ----------------
-    print("\n📦 正在加载并无损处理 Test 数据...")
+    # ---------------- 2. 测试集 GT 数据准备 ----------------
+    print("\n📦 正在加载测试集临床表与 GT 特征...")
     df_test_clinical = pd.read_excel(os.path.join(WORK_DIR, "clinical_info_test.xlsx"))
     df_test_clinical = df_test_clinical.rename(columns={'label': 'Label'})
-    df_test_gt = pd.read_csv(os.path.join(WORK_DIR, "Test_GT_Features_62.csv"))
-    df_test_pred = pd.read_csv(os.path.join(WORK_DIR, "Test_Pred_Features_62.csv"))
+    df_test_gt = pd.read_csv(os.path.join(PRED_DIR, "Test_GT_Features.csv"))
 
     for col in ['CRP', 'ESR', 'HLA-B27', 'Disease_Duration_Category']:
         df_test_clinical[col] = pd.to_numeric(df_test_clinical[col], errors='coerce')
-
     for col in imputer_dict.keys():
         df_test_clinical[col] = df_test_clinical[col].fillna(imputer_dict[col])
 
     df_test_clinical['Patient_ID'] = df_test_clinical['Patient_ID'].astype(str).str.strip()
     df_test_gt['Patient_ID'] = df_test_gt['Patient_ID'].astype(str).str.strip()
-    df_test_pred['Patient_ID'] = df_test_pred['Patient_ID'].astype(str).str.strip()
-
     df_test_merge_gt = pd.merge(df_test_gt, df_test_clinical, on='Patient_ID', how='inner')
-    df_test_merge_pred = pd.merge(df_test_pred, df_test_clinical, on='Patient_ID', how='inner')
-    y_test = df_test_merge_gt['Label'].values
-    print(f"   => 匹配到 {len(df_test_merge_gt)} 名有效测试集患者。")
+    y_test_gt = df_test_merge_gt['Label'].values
 
-    # ---------------- 3. 计算双轨特征与预测概率 ----------------
-    print("\n⚙️ 正在执行双轨模型预测 (金标准 GT vs 全自动 AI Pred)...")
+    # 计算 GT 整体概率
     X_test_gt_scaled = pd.DataFrame(train_scaler.transform(df_test_merge_gt[feature_cols_all]),
                                     columns=feature_cols_all)
-    X_test_pred_scaled = pd.DataFrame(train_scaler.transform(df_test_merge_pred[feature_cols_all]),
-                                      columns=feature_cols_all)
-
-    # 严格执行常量乘法计算 Test 的 Rad_score
     df_test_merge_gt['Rad_score'] = lasso_intercept + np.dot(X_test_gt_scaled[selected_features], lasso_coefs)
-    df_test_merge_pred['Rad_score'] = lasso_intercept + np.dot(X_test_pred_scaled[selected_features], lasso_coefs)
-
-    X_test_gt_clin = sm.add_constant(df_test_merge_gt[clinical_vars], has_constant='add')
-    X_test_pred_clin = sm.add_constant(df_test_merge_pred[clinical_vars], has_constant='add')
-
-    # 确保列顺序完全一致
-    X_test_gt_clin = X_test_gt_clin[['const'] + clinical_vars]
-    X_test_pred_clin = X_test_pred_clin[['const'] + clinical_vars]
-
+    X_test_gt_clin = sm.add_constant(df_test_merge_gt[clinical_vars], has_constant='add')[['const'] + clinical_vars]
     prob_test_gt = train_model.predict(X_test_gt_clin)
-    prob_test_pred = train_model.predict(X_test_pred_clin)
-
-    # ---------------- 4. 统计学审判 (AUC与DeLong) ----------------
-    fpr_gt, tpr_gt, _ = roc_curve(y_test, prob_test_gt)
+    fpr_gt, tpr_gt, _ = roc_curve(y_test_gt, prob_test_gt)
     auc_gt = auc(fpr_gt, tpr_gt)
-    fpr_pred, tpr_pred, _ = roc_curve(y_test, prob_test_pred)
-    auc_pred = auc(fpr_pred, tpr_pred)
 
-    delong_p = delong_roc_test(y_test, prob_test_gt, prob_test_pred)
+    # ---------------- 3. 批量计算多阈值 Pred (动态对齐样本) ----------------
+    print(f"\n⚙️ 正在执行多轨 AI 模型预测对比 (阈值: {target_thresholds})...")
 
-    print(f"\n🏆 ====== 终极战斗报告 ======")
-    print(f"   * Test GT AUC (医生金标准): {auc_gt:.3f}")
-    print(f"   * Test Pred AUC (AI全自动): {auc_pred:.3f}")
-    print(f"   * DeLong Test P-value: {delong_p:.4f}")
+    pred_results = {}
 
-    # 🔥 修复 2：加入绝对实力前提校验的胜利宣言
-    if delong_p > 0.05 and auc_pred >= 0.80:
-        print("   ✅ 统计学结论：AI 预测效能极佳 (AUC>=0.8) 且与医生手工分割无显著差异 (P>0.05)，证明可临床替代！")
-    elif delong_p > 0.05 and auc_pred < 0.80:
-        print("   ⚠️ 统计学结论：虽然无显著差异 (P>0.05)，但 AI 本身预测效能欠佳 (AUC<0.8)，需谨慎解读。")
-    else:
-        print("   ⚠️ 统计学结论：两组存在显著差异。")
-
-    # 计算基于锁定 Cutoff 的硬指标
     def calc_metrics(y_t, prob):
         pred_label = (prob >= locked_cutoff).astype(int)
-        # 🔥 修复 1：防爆声明 labels=[0, 1] 彻底杜绝小样本解包崩溃
         tn, fp, fn, tp = confusion_matrix(y_t, pred_label, labels=[0, 1]).ravel()
         sens = tp / (tp + fn) if (tp + fn) > 0 else 0
         spec = tn / (tn + fp) if (tn + fp) > 0 else 0
         acc = accuracy_score(y_t, pred_label)
         return sens, spec, acc
 
-    gt_sens, gt_spec, gt_acc = calc_metrics(y_test, prob_test_gt)
-    pred_sens, pred_spec, pred_acc = calc_metrics(y_test, prob_test_pred)
+    gt_sens, gt_spec, gt_acc = calc_metrics(y_test_gt, prob_test_gt)
 
-    print("\n📊 基于锁定阈值 (Cutoff={:.3f}) 的硬核指标：".format(locked_cutoff))
-    print(f"   * GT 组   - 准确率: {gt_acc:.3f}, 敏感度: {gt_sens:.3f}, 特异度: {gt_spec:.3f}")
-    print(f"   * Pred 组 - 准确率: {pred_acc:.3f}, 敏感度: {pred_sens:.3f}, 特异度: {pred_spec:.3f}")
+    for t in target_thresholds:
+        csv_path = os.path.join(PRED_DIR, f"Test_Pred_Features_{t}.csv")
+        if not os.path.exists(csv_path):
+            print(f"⚠️ 找不到文件: {csv_path}，跳过该阈值。")
+            continue
 
-    # ---------------- 5. 顶刊图表三连击 ----------------
-    print("\n🎨 正在绘制顶刊三大神图...")
+        df_pred = pd.read_csv(csv_path)
+        df_pred['Patient_ID'] = df_pred['Patient_ID'].astype(str).str.strip()
+        df_merge_pred = pd.merge(df_pred, df_test_clinical, on='Patient_ID', how='inner')
 
-    # 图 1: 三线合一 ROC 曲线
+        # 🔥 关键修复 1：动态提取当前存活病人的 Label (比如 54 人)
+        y_test_p = df_merge_pred['Label'].values
+
+        # 🔥 关键修复 2：为了 DeLong 检验公平，必须提取这 54 人对应的 GT 预测概率！
+        df_aligned_gt = pd.merge(df_pred[['Patient_ID']], df_test_merge_gt, on='Patient_ID', how='inner')
+        X_aligned_gt_clin = sm.add_constant(df_aligned_gt[clinical_vars], has_constant='add')[['const'] + clinical_vars]
+        prob_gt_aligned = train_model.predict(X_aligned_gt_clin)
+
+        # 计算当前阈值下 Pred 的概率
+        X_pred_scaled = pd.DataFrame(train_scaler.transform(df_merge_pred[feature_cols_all]), columns=feature_cols_all)
+        df_merge_pred['Rad_score'] = lasso_intercept + np.dot(X_pred_scaled[selected_features], lasso_coefs)
+        X_pred_clin = sm.add_constant(df_merge_pred[clinical_vars], has_constant='add')[['const'] + clinical_vars]
+        prob_pred = train_model.predict(X_pred_clin)
+
+        fpr_p, tpr_p, _ = roc_curve(y_test_p, prob_pred)
+        auc_p = auc(fpr_p, tpr_p)
+
+        delong_p = delong_roc_test(y_test_p, prob_gt_aligned, prob_pred)
+        sens, spec, acc = calc_metrics(y_test_p, prob_pred)
+
+        # 保存时带上 y_test_p，防止画图时崩溃
+        pred_results[t] = {
+            'prob': prob_pred, 'fpr': fpr_p, 'tpr': tpr_p, 'auc': auc_p,
+            'delong': delong_p, 'sens': sens, 'spec': spec, 'acc': acc,
+            'y_test_p': y_test_p, 'num_samples': len(y_test_p)
+        }
+
+    # ---------------- 4. 终极排行榜播报 ----------------
+    print("\n🏆 ====== 终极战斗排行榜 (Test Set) ======")
+    print(
+        f"【金标准】GT AUC: {auc_gt:.3f} | 准确率: {gt_acc:.3f} | 敏感度: {gt_sens:.3f} | 特异度: {gt_spec:.3f} (N={len(y_test_gt)})")
+    print("-" * 90)
+    print(
+        f"{'AI 阈值':<8} | {'有效人数':<6} | {'AUC':<7} | {'DeLong P':<10} | {'准确率':<8} | {'敏感度':<8} | {'特异度':<8}")
+    print("-" * 90)
+
+    for t in target_thresholds:
+        if t in pred_results:
+            res = pred_results[t]
+            marker = "🌟" if res['auc'] >= 0.8 else "  "
+            print(
+                f"{marker} 0.{t} | N={res['num_samples']:<4} | {res['auc']:.3f}   | {res['delong']:.4f}     | {res['acc']:.3f}    | {res['sens']:.3f}    | {res['spec']:.3f}")
+    print("-" * 90)
+
+    # ---------------- 5. 顶刊图表：五线合一绘制 ----------------
+    print("\n🎨 正在绘制顶刊多轨对比三大神图...")
+    colors = ['#e74c3c', '#f39c12', '#27ae60']
+
+    # 图 1: 多线 ROC 曲线
     plt.figure(figsize=(8, 7), dpi=300)
     plt.plot(fpr_train, tpr_train, color='gray', lw=1.5, linestyle='--', label=f'Train AUC = {auc_train:.3f}')
     plt.plot(fpr_gt, tpr_gt, color='#2980b9', lw=2.5, label=f'Test (GT) AUC = {auc_gt:.3f}')
-    plt.plot(fpr_pred, tpr_pred, color='#c0392b', lw=2.5, label=f'Test (AI-Pred) AUC = {auc_pred:.3f}')
+
+    for idx, t in enumerate(target_thresholds):
+        if t in pred_results:
+            plt.plot(pred_results[t]['fpr'], pred_results[t]['tpr'], color=colors[idx], lw=2,
+                     label=f'Test (Pred {t}) AUC = {pred_results[t]["auc"]:.3f}')
+
     plt.plot([0, 1], [0, 1], color='black', lw=1, linestyle=':')
     plt.xlim([0.0, 1.0])
     plt.ylim([0.0, 1.05])
     plt.xlabel('False Positive Rate', fontweight='bold', fontsize=12)
     plt.ylabel('True Positive Rate', fontweight='bold', fontsize=12)
-    plt.title('Receiver Operating Characteristic (ROC)', fontweight='bold', fontsize=14)
+    plt.title('Receiver Operating Characteristic (Sensitivity Analysis)', fontweight='bold', fontsize=14)
     plt.legend(loc="lower right", fontsize=11)
-
-    delong_text = f"DeLong Test (GT vs Pred)\nP-value = {delong_p:.3f}"
-    plt.text(0.5, 0.2, delong_text, fontsize=11, ha='center', va='center',
-             bbox=dict(facecolor='white', alpha=0.8, edgecolor='gray'))
-    plt.savefig(os.path.join(WORK_DIR, "Step6_ROC_Curve.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(PRED_DIR, "Step6_ROC_Curve_Multi.png"), bbox_inches='tight')
     plt.close()
 
-    # 图 2: 双轨校准曲线 (Calibration Curve)
+    # 图 2: 多线校准曲线
     plt.figure(figsize=(8, 7), dpi=300)
-    prob_true_gt, prob_pred_gt = calibration_curve(y_test, prob_test_gt, n_bins=5, strategy='quantile')
-    prob_true_pred, prob_pred_pred = calibration_curve(y_test, prob_test_pred, n_bins=5, strategy='quantile')
-
+    prob_true_gt, prob_pred_gt = calibration_curve(y_test_gt, prob_test_gt, n_bins=5, strategy='quantile')
     plt.plot([0, 1], [0, 1], "k:", label="Perfectly calibrated")
     plt.plot(prob_pred_gt, prob_true_gt, "s-", color='#2980b9', label="Test (GT)")
-    plt.plot(prob_pred_pred, prob_true_pred, "o-", color='#c0392b', label="Test (AI-Pred)")
+
+    for idx, t in enumerate(target_thresholds):
+        if t in pred_results:
+            # 🔥 关键修复 3：画图时也必须用存活的 y_test_p！
+            prob_true_p, prob_pred_p = calibration_curve(pred_results[t]['y_test_p'], pred_results[t]['prob'], n_bins=5,
+                                                         strategy='quantile')
+            plt.plot(prob_pred_p, prob_true_p, "o-", color=colors[idx], alpha=0.8, label=f"Test (Pred {t})")
+
     plt.xlabel('Mean predicted probability', fontweight='bold', fontsize=12)
     plt.ylabel('Fraction of positives', fontweight='bold', fontsize=12)
-    plt.title('Calibration Curve', fontweight='bold', fontsize=14)
+    plt.title('Calibration Curve (Sensitivity Analysis)', fontweight='bold', fontsize=14)
     plt.legend(loc="lower right")
-    plt.savefig(os.path.join(WORK_DIR, "Step6_Calibration_Curve.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(PRED_DIR, "Step6_Calibration_Curve_Multi.png"), bbox_inches='tight')
     plt.close()
 
-    # 图 3: 双轨 DCA 决策曲线
+    # 图 3: 多线 DCA 决策曲线
     plt.figure(figsize=(8, 7), dpi=300)
-    thresholds = np.linspace(0.01, 0.99, 100)
+    thresholds_arr = np.linspace(0.01, 0.99, 100)
+    nb_all = calculate_net_benefit(y_test_gt, np.ones_like(y_test_gt), thresholds_arr)
+    nb_none = np.zeros_like(thresholds_arr)
+    nb_gt = calculate_net_benefit(y_test_gt, prob_test_gt, thresholds_arr)
 
-    nb_all = calculate_net_benefit(y_test, np.ones_like(y_test), thresholds)
-    nb_none = np.zeros_like(thresholds)
-    nb_gt = calculate_net_benefit(y_test, prob_test_gt, thresholds)
-    nb_pred = calculate_net_benefit(y_test, prob_test_pred, thresholds)
+    plt.plot(thresholds_arr, nb_all, color='gray', linestyle=':', label='Treat All')
+    plt.plot(thresholds_arr, nb_none, color='black', linestyle='-', label='Treat None')
+    plt.plot(thresholds_arr, nb_gt, color='#2980b9', lw=2.5, label='Test (GT)')
 
-    plt.plot(thresholds, nb_all, color='gray', linestyle=':', label='Treat All')
-    plt.plot(thresholds, nb_none, color='black', linestyle='-', label='Treat None')
-    plt.plot(thresholds, nb_gt, color='#2980b9', lw=2, label='Test (GT)')
-    plt.plot(thresholds, nb_pred, color='#c0392b', lw=2, label='Test (AI-Pred)')
+    for idx, t in enumerate(target_thresholds):
+        if t in pred_results:
+            # 🔥 关键修复 4：画 DCA 时也用对应的 y_test_p
+            nb_pred = calculate_net_benefit(pred_results[t]['y_test_p'], pred_results[t]['prob'], thresholds_arr)
+            plt.plot(thresholds_arr, nb_pred, color=colors[idx], lw=2, alpha=0.8, label=f'Test (Pred {t})')
 
     plt.xlim([0.0, 0.8])
-    plt.ylim([-0.05, max(nb_all.max(), nb_gt.max(), nb_pred.max()) + 0.1])
+    plt.ylim([-0.05, max(nb_all.max(), nb_gt.max()) + 0.1])
     plt.xlabel('Threshold Probability', fontweight='bold', fontsize=12)
     plt.ylabel('Net Benefit', fontweight='bold', fontsize=12)
-    plt.title('Decision Curve Analysis (DCA)', fontweight='bold', fontsize=14)
+    plt.title('Decision Curve Analysis (Sensitivity Analysis)', fontweight='bold', fontsize=14)
     plt.legend(loc="upper right")
-    plt.savefig(os.path.join(WORK_DIR, "Step6_DCA_Curve.png"), bbox_inches='tight')
+    plt.savefig(os.path.join(PRED_DIR, "Step6_DCA_Curve_Multi.png"), bbox_inches='tight')
     plt.close()
 
-    print("🎉 顶刊图表三连击生成完毕！请前往文件夹查看：")
-    print("   1. Step6_ROC_Curve.png")
-    print("   2. Step6_Calibration_Curve.png")
-    print("   3. Step6_DCA_Curve.png")
+    print("🎉 顶刊对比图表生成完毕！请前往 F:\\check 文件夹查看以 _Multi 结尾的图片。")
 
 
 if __name__ == "__main__":
