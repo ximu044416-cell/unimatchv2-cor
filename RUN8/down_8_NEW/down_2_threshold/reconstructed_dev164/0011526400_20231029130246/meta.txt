@@ -1,0 +1,3 @@
+Patient_ID: 0011526400_20231029130246
+Source_Split: val
+Num_Slices: 16

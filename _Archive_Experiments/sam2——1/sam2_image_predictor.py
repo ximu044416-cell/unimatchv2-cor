@@ -31,7 +31,7 @@ class SAM2ImagePredictor:
         allow repeated, efficient mask prediction given prompts.
 
         Arguments:
-          sam_model (Sam-2): The model to use for mask prediction.
+          sam_model (Sam-2): The models to use for mask prediction.
           mask_threshold (float): The threshold to use when converting mask logits
             to binary masks. Masks are thresholded at 0 by default.
           max_hole_area (int): If max_hole_area > 0, we fill small holes in up to
@@ -70,14 +70,14 @@ class SAM2ImagePredictor:
     @classmethod
     def from_pretrained(cls, model_id: str, **kwargs) -> "SAM2ImagePredictor":
         """
-        Load a pretrained model from the Hugging Face hub.
+        Load a pretrained models from the Hugging Face hub.
 
         Arguments:
           model_id (str): The Hugging Face repository ID.
-          **kwargs: Additional arguments to pass to the model constructor.
+          **kwargs: Additional arguments to pass to the models constructor.
 
         Returns:
-          (SAM2ImagePredictor): The loaded model.
+          (SAM2ImagePredictor): The loaded models.
         """
         from sam2.build_sam import build_sam2_hf
 
@@ -99,7 +99,7 @@ class SAM2ImagePredictor:
           image_format (str): The color format of the image, in ['RGB', 'BGR'].
         """
         self.reset_predictor()
-        # Transform the image to the form expected by the model
+        # Transform the image to the form expected by the models
         if isinstance(image, np.ndarray):
             logging.info("For numpy array image, we assume (HxWxC) format")
             self._orig_hw = [image.shape[:2]]
@@ -151,7 +151,7 @@ class SAM2ImagePredictor:
                 image, np.ndarray
             ), "Images are expected to be an np.ndarray in RGB format, and of shape  HWC"
             self._orig_hw.append(image.shape[:2])
-        # Transform the image to the form expected by the model
+        # Transform the image to the form expected by the models
         img_batch = self._transforms.forward_batch(image_list)
         img_batch = img_batch.to(self.device)
         batch_size = img_batch.shape[0]
@@ -184,7 +184,7 @@ class SAM2ImagePredictor:
         return_logits: bool = False,
         normalize_coords=True,
     ) -> Tuple[List[np.ndarray], List[np.ndarray], List[np.ndarray]]:
-        """This function is very similar to predict(...), however it is used for batched mode, when the model is expected to generate predictions on multiple images.
+        """This function is very similar to predict(...), however it is used for batched mode, when the models is expected to generate predictions on multiple images.
         It returns a tuple of lists of masks, ious, and low_res_masks_logits.
         """
         assert self._is_batch, "This function should only be used when in batched mode"
@@ -251,19 +251,19 @@ class SAM2ImagePredictor:
 
         Arguments:
           point_coords (np.ndarray or None): A Nx2 array of point prompts to the
-            model. Each point is in (X,Y) in pixels.
+            models. Each point is in (X,Y) in pixels.
           point_labels (np.ndarray or None): A length N array of labels for the
             point prompts. 1 indicates a foreground point and 0 indicates a
             background point.
           box (np.ndarray or None): A length 4 array given a box prompt to the
-            model, in XYXY format.
-          mask_input (np.ndarray): A low resolution mask input to the model, typically
+            models, in XYXY format.
+          mask_input (np.ndarray): A low resolution mask input to the models, typically
             coming from a previous prediction iteration. Has form 1xHxW, where
             for SAM, H=W=256.
-          multimask_output (bool): If true, the model will return three masks.
+          multimask_output (bool): If true, the models will return three masks.
             For ambiguous input prompts (such as a single click), this will often
             produce better masks than a single prediction. If only a single
-            mask is needed, the model's predicted quality score can be used
+            mask is needed, the models's predicted quality score can be used
             to select the best mask. For non-ambiguous prompts, such as multiple
             input prompts, multimask_output=False can give better results.
           return_logits (bool): If true, returns un-thresholded masks logits
@@ -273,7 +273,7 @@ class SAM2ImagePredictor:
         Returns:
           (np.ndarray): The output masks in CxHxW format, where C is the
             number of masks, and (H, W) is the original image size.
-          (np.ndarray): An array of length C containing the model's
+          (np.ndarray): An array of length C containing the models's
             predictions for the quality of each mask.
           (np.ndarray): An array of shape CxHxW, where C is the number
             of masks and H=W=256. These low resolution logits can be passed to
@@ -353,20 +353,20 @@ class SAM2ImagePredictor:
 
         Arguments:
           point_coords (torch.Tensor or None): A BxNx2 array of point prompts to the
-            model. Each point is in (X,Y) in pixels.
+            models. Each point is in (X,Y) in pixels.
           point_labels (torch.Tensor or None): A BxN array of labels for the
             point prompts. 1 indicates a foreground point and 0 indicates a
             background point.
           boxes (np.ndarray or None): A Bx4 array given a box prompt to the
-            model, in XYXY format.
-          mask_input (np.ndarray): A low resolution mask input to the model, typically
+            models, in XYXY format.
+          mask_input (np.ndarray): A low resolution mask input to the models, typically
             coming from a previous prediction iteration. Has form Bx1xHxW, where
             for SAM, H=W=256. Masks returned by a previous iteration of the
             predict method do not need further transformation.
-          multimask_output (bool): If true, the model will return three masks.
+          multimask_output (bool): If true, the models will return three masks.
             For ambiguous input prompts (such as a single click), this will often
             produce better masks than a single prediction. If only a single
-            mask is needed, the model's predicted quality score can be used
+            mask is needed, the models's predicted quality score can be used
             to select the best mask. For non-ambiguous prompts, such as multiple
             input prompts, multimask_output=False can give better results.
           return_logits (bool): If true, returns un-thresholded masks logits
@@ -375,7 +375,7 @@ class SAM2ImagePredictor:
         Returns:
           (torch.Tensor): The output masks in BxCxHxW format, where C is the
             number of masks, and (H, W) is the original image size.
-          (torch.Tensor): An array of shape BxC containing the model's
+          (torch.Tensor): An array of shape BxC containing the models's
             predictions for the quality of each mask.
           (torch.Tensor): An array of shape BxCxHxW, where C is the number
             of masks and H=W=256. These low res logits can be passed to

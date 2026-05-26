@@ -1,0 +1,7 @@
+RUN8 dev164 Threshold Calibration Summary
+============================================================
+Best threshold by Mean 3D Dice      : 0.55 (Dice=0.4644)
+Best threshold by Mean Abs RVE      : 0.85 (AbsRVE=46.2523%)
+
+Reminder: final downstream deployment threshold should be decided on dev164 only,
+and then frozen before evaluation on test40.

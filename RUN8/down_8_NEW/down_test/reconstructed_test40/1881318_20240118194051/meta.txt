@@ -1,0 +1,4 @@
+Patient_ID: 1881318_20240118194051
+Source_Split: test40
+Num_Slices: 13
+Thresholds: [0.8, 0.75]

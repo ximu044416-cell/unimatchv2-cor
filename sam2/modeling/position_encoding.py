@@ -32,7 +32,7 @@ class PositionEmbeddingSine(nn.Module):
         strides: Tuple[int] = (4, 8, 16, 32),
     ):
         super().__init__()
-        assert num_pos_feats % 2 == 0, "Expecting even model width"
+        assert num_pos_feats % 2 == 0, "Expecting even models width"
         self.num_pos_feats = num_pos_feats // 2
         self.temperature = temperature
         self.normalize = normalize

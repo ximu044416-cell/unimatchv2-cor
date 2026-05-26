@@ -1,0 +1,7 @@
+Hosmer-Lemeshow test for final deployment setting
+=================================================
+Final threshold = 0.7
+Final mode      = primary_rescue
+
+GT contour : HL chi-square = 35.975304, p = 0.000018, groups = 10
+AI contour : HL chi-square = 28.981052, p = 0.000320, groups = 10

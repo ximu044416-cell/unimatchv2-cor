@@ -1,0 +1,31 @@
+{
+  "GT": {
+    "Path": "GT",
+    "AUC": 0.9575,
+    "HL_stat": 20.8954782448363,
+    "HL_p": 0.007430325753503775,
+    "HL_groups": 10,
+    "Spearman_RadScore_vs_SPARCC_r": 0.73828161600906,
+    "Spearman_RadScore_vs_SPARCC_p": 5.413138470601994e-08
+  },
+  "Pred_080": {
+    "Path": "Pred_080",
+    "AUC": 0.98,
+    "HL_stat": 32.18145467683019,
+    "HL_p": 8.642238408929082e-05,
+    "HL_groups": 10,
+    "Spearman_RadScore_vs_SPARCC_r": 0.8102104393390658,
+    "Spearman_RadScore_vs_SPARCC_p": 2.393885242914871e-10
+  },
+  "Pred_075": {
+    "Path": "Pred_075",
+    "AUC": 0.98,
+    "HL_stat": 30.70954804816054,
+    "HL_p": 0.00015824461483526786,
+    "HL_groups": 10,
+    "Spearman_RadScore_vs_SPARCC_r": 0.8018022386509623,
+    "Spearman_RadScore_vs_SPARCC_p": 5.041859134910669e-10
+  },
+  "DeLong_P_080_vs_GT": 0.24068706997901135,
+  "DeLong_P_075_vs_GT": 0.24068706997901135
+}

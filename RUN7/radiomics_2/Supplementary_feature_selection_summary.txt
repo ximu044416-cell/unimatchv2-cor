@@ -1,0 +1,18 @@
+Supplementary feature selection summary
+=====================================
+
+Merged training patients: 142
+After Mann-Whitney U filtering: 891 features
+After Spearman reduction: 177 features
+CV-optimal alpha: 0.03430469
+Final alpha (<=7 features): 0.08859594
+Final retained features: 7
+Final intercept: 0.35211268
+
+log-sigma-2-0-mm-3D_gldm_LargeDependenceHighGrayLevelEmphasis	0.03254056
+original_shape_Sphericity	-0.02945129
+original_shape_SurfaceVolumeRatio	-0.09888475
+wavelet-HHH_firstorder_Maximum	0.00325738
+wavelet-HHH_gldm_DependenceEntropy	0.00308587
+wavelet-LHH_gldm_LargeDependenceHighGrayLevelEmphasis	0.03229064
+wavelet-LLH_glcm_MCC	-0.10303775

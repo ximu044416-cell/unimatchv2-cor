@@ -1,0 +1,8 @@
+RUN8 test40 final frozen evaluation
+======================================================================
+Locked cutoff (from dev164): 0.353582
+Healthy minimum Rad-score  : -0.147357
+
+{"Path": "GT", "AUC": 0.9575, "ACC": 0.85, "SEN": 0.7, "SPE": 1.0, "Rescue_N": 0, "Failed_Extraction_N": 0, "All_Zero_Features_N": 0, "Spearman_RadScore_vs_SPARCC_r": 0.73828161600906, "Spearman_RadScore_vs_SPARCC_p": 5.413138470601994e-08, "DeLong_P_vs_GT": NaN}
+{"Path": "Pred_080", "AUC": 0.98, "ACC": 0.875, "SEN": 0.75, "SPE": 1.0, "Rescue_N": 9, "Failed_Extraction_N": 0, "All_Zero_Features_N": 9, "Spearman_RadScore_vs_SPARCC_r": 0.8102104393390658, "Spearman_RadScore_vs_SPARCC_p": 2.393885242914871e-10, "DeLong_P_vs_GT": 0.24068706997901135}
+{"Path": "Pred_075", "AUC": 0.98, "ACC": 0.875, "SEN": 0.75, "SPE": 1.0, "Rescue_N": 9, "Failed_Extraction_N": 0, "All_Zero_Features_N": 9, "Spearman_RadScore_vs_SPARCC_r": 0.8018022386509623, "Spearman_RadScore_vs_SPARCC_p": 5.041859134910669e-10, "DeLong_P_vs_GT": 0.24068706997901135}

@@ -1,0 +1,1 @@
+from .config_2 import config

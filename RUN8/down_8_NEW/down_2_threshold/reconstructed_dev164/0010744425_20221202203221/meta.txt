@@ -1,0 +1,3 @@
+Patient_ID: 0010744425_20221202203221
+Source_Split: train
+Num_Slices: 13

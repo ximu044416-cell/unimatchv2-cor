@@ -49,7 +49,7 @@ class SAM2VideoPredictor(SAM2Base):
         async_loading_frames=False,
     ):
         """Initialize an inference state."""
-        compute_device = self.device  # device of the model
+        compute_device = self.device  # device of the models
         images, video_height, video_width = load_video_frames(
             video_path=video_path,
             image_size=self.image_size,
@@ -65,7 +65,7 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["offload_video_to_cpu"] = offload_video_to_cpu
         # whether to offload the inference state to CPU memory
         # turning on this option saves the GPU memory at the cost of a lower tracking fps
-        # (e.g. in a test case of 768x768 model, fps dropped from 27 to 24 when tracking one object
+        # (e.g. in a test case of 768x768 models, fps dropped from 27 to 24 when tracking one object
         # and from 24 to 21 when tracking two objects)
         inference_state["offload_state_to_cpu"] = offload_state_to_cpu
         # the original video height and width, used for resizing final output scores
@@ -83,11 +83,11 @@ class SAM2VideoPredictor(SAM2Base):
         inference_state["cached_features"] = {}
         # values that don't change across frames (so we only need to hold one copy of them)
         inference_state["constants"] = {}
-        # mapping between client-side object id and model-side object index
+        # mapping between client-side object id and models-side object index
         inference_state["obj_id_to_idx"] = OrderedDict()
         inference_state["obj_idx_to_id"] = OrderedDict()
         inference_state["obj_ids"] = []
-        # A storage to hold the model's tracking results and states on each frame
+        # A storage to hold the models's tracking results and states on each frame
         inference_state["output_dict"] = {
             "cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
             "non_cond_frame_outputs": {},  # dict containing {frame_idx: <out>}
@@ -113,14 +113,14 @@ class SAM2VideoPredictor(SAM2Base):
     @classmethod
     def from_pretrained(cls, model_id: str, **kwargs) -> "SAM2VideoPredictor":
         """
-        Load a pretrained model from the Hugging Face hub.
+        Load a pretrained models from the Hugging Face hub.
 
         Arguments:
           model_id (str): The Hugging Face repository ID.
-          **kwargs: Additional arguments to pass to the model constructor.
+          **kwargs: Additional arguments to pass to the models constructor.
 
         Returns:
-          (SAM2VideoPredictor): The loaded model.
+          (SAM2VideoPredictor): The loaded models.
         """
         from sam2.build_sam import build_sam2_video_predictor_hf
 
@@ -128,7 +128,7 @@ class SAM2VideoPredictor(SAM2Base):
         return sam_model
 
     def _obj_id_to_idx(self, inference_state, obj_id):
-        """Map client-side object id to model-side object index."""
+        """Map client-side object id to models-side object index."""
         obj_idx = inference_state["obj_id_to_idx"].get(obj_id, None)
         if obj_idx is not None:
             return obj_idx
@@ -162,7 +162,7 @@ class SAM2VideoPredictor(SAM2Base):
             )
 
     def _obj_idx_to_id(self, inference_state, obj_idx):
-        """Map model-side object index to client-side object id."""
+        """Map models-side object index to client-side object id."""
         return inference_state["obj_idx_to_id"][obj_idx]
 
     def _get_obj_num(self, inference_state):
@@ -234,7 +234,7 @@ class SAM2VideoPredictor(SAM2Base):
             video_H = inference_state["video_height"]
             video_W = inference_state["video_width"]
             points = points / torch.tensor([video_W, video_H]).to(points.device)
-        # scale the (normalized) coordinates by the model's internal image size
+        # scale the (normalized) coordinates by the models's internal image size
         points = points * self.image_size
         points = points.to(inference_state["device"])
         labels = labels.to(inference_state["device"])
@@ -260,7 +260,7 @@ class SAM2VideoPredictor(SAM2Base):
         obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
         obj_temp_output_dict = inference_state["temp_output_dict_per_obj"][obj_idx]
         # Add a frame to conditioning output if it's an initial conditioning frame or
-        # if the model sees all frames receiving clicks/mask as conditioning frames.
+        # if the models sees all frames receiving clicks/mask as conditioning frames.
         is_cond = is_init_cond_frame or self.add_all_frames_to_correct_as_cond
         storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
 
@@ -337,7 +337,7 @@ class SAM2VideoPredictor(SAM2Base):
         mask_inputs_orig = mask[None, None]  # add batch and channel dimension
         mask_inputs_orig = mask_inputs_orig.float().to(inference_state["device"])
 
-        # resize the mask if it doesn't match the model's image size
+        # resize the mask if it doesn't match the models's image size
         if mask_H != self.image_size or mask_W != self.image_size:
             mask_inputs = torch.nn.functional.interpolate(
                 mask_inputs_orig,
@@ -365,7 +365,7 @@ class SAM2VideoPredictor(SAM2Base):
         obj_output_dict = inference_state["output_dict_per_obj"][obj_idx]
         obj_temp_output_dict = inference_state["temp_output_dict_per_obj"][obj_idx]
         # Add a frame to conditioning output if it's an initial conditioning frame or
-        # if the model sees all frames receiving clicks/mask as conditioning frames.
+        # if the models sees all frames receiving clicks/mask as conditioning frames.
         is_cond = is_init_cond_frame or self.add_all_frames_to_correct_as_cond
         storage_key = "cond_frame_outputs" if is_cond else "non_cond_frame_outputs"
 
@@ -1156,10 +1156,10 @@ class SAM2VideoPredictor(SAM2Base):
         """
         Remove the non-conditioning memory around the input frame. When users provide
         correction clicks, the surrounding frames' non-conditioning memories can still
-        contain outdated object appearance information and could confuse the model.
+        contain outdated object appearance information and could confuse the models.
 
         This method clears those non-conditioning memories surrounding the interacted
-        frame to avoid giving the model both old and new information about the object.
+        frame to avoid giving the models both old and new information about the object.
         """
         r = self.memory_temporal_stride_for_eval
         frame_idx_begin = frame_idx - r * self.num_maskmem

@@ -10,11 +10,11 @@ from sam2.modeling.sam2_utils import get_1d_sine_pe
 
 class SAM2VideoTrainer(nn.Module):
     """
-    SAM2VideoTrainer is a PyTorch module for training a video segmentation model using SAM2.
+    SAM2VideoTrainer is a PyTorch module for training a video segmentation models using SAM2.
     Attributes:
-        device (torch.device): The device to run the model on.
-        model (nn.Module): The SAM2 video predictor model.
-        num_feature_levels (int): Number of feature levels in the model.
+        device (torch.device): The device to run the models on.
+        model (nn.Module): The SAM2 video predictor models.
+        num_feature_levels (int): Number of feature levels in the models.
         memory_size (int): Size of the memory for storing features.
         _transforms (SAM2Transforms): Transformations applied to the input data.
         _bb_feat_sizes (list): Spatial dimensions for backbone feature maps.
@@ -33,17 +33,17 @@ class SAM2VideoTrainer(nn.Module):
         Initializes the SAM2VideoTrainer class.
 
         Args:
-            model_cfg (dict): Configuration dictionary for the model.
+            model_cfg (dict): Configuration dictionary for the models.
             sam2_checkpoint (str): Path to the SAM2 checkpoint file.
-            device (torch.device): The device to run the model on (e.g., 'cpu' or 'cuda').
+            device (torch.device): The device to run the models on (e.g., 'cpu' or 'cuda').
             memory_size (int, optional): Size of the memory. Defaults to 7.
             mask_threshold (float, optional): Threshold for mask prediction. Defaults to 0.5.
             use_mask_threshold (bool, optional): Flag to use mask thresholding. Defaults to False.
 
         Attributes:
-            device (torch.device): The device to run the model on.
-            model (SAM2VideoPredictor): The SAM2 video predictor model.
-            num_feature_levels (int): Number of feature levels in the model.
+            device (torch.device): The device to run the models on.
+            models (SAM2VideoPredictor): The SAM2 video predictor models.
+            num_feature_levels (int): Number of feature levels in the models.
             memory_size (int): Size of the memory.
             _transforms (SAM2Transforms): Transformations applied to the input data.
             _bb_feat_sizes (list): Spatial dimensions for backbone feature maps.
@@ -241,7 +241,7 @@ class SAM2VideoTrainer(nn.Module):
 
     def unbind_frame_features(self, frame_features, num_frames):
         """
-        Unbind image features from the model.
+        Unbind image features from the models.
         """
         keys = frame_features.keys()
         unbinded_frame_features = []

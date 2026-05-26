@@ -1,0 +1,3 @@
+Patient_ID: 2209519_20220216193912
+Source_Split: train
+Num_Slices: 20

@@ -1,0 +1,4 @@
+Patient_ID: 0002207759_20230312124001
+Source_Split: test40
+Num_Slices: 10
+Thresholds: [0.8, 0.75]

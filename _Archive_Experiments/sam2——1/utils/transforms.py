@@ -51,7 +51,7 @@ class SAM2Transforms(nn.Module):
         If the coords are in absolute image coordinates, normalize should be set to True and original image size is required.
 
         Returns
-            Un-normalized coordinates in the range of [0, 1] which is expected by the SAM2 model.
+            Un-normalized coordinates in the range of [0, 1] which is expected by the SAM2 models.
         """
         if normalize:
             assert orig_hw is not None

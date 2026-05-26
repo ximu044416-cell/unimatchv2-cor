@@ -38,7 +38,7 @@ class EfficientTAMBase(torch.nn.Module):
         binarize_mask_from_pts_for_mem_enc=False,
         use_mask_input_as_output_without_sam=False,  # on frames with mask input, whether to directly output the input mask without using a SAM prompt encoder + mask decoder
         # The maximum number of conditioning frames to participate in the memory attention (-1 means no limit; if there are more conditioning frames than this limit,
-        # we only cross-attend to the temporally closest `max_cond_frames_in_attn` conditioning frames in the encoder when tracking each frame). This gives the model
+        # we only cross-attend to the temporally closest `max_cond_frames_in_attn` conditioning frames in the encoder when tracking each frame). This gives the models
         # a temporal locality when handling a large number of annotated frames (since closer frames should be more important) and also avoids GPU OOM.
         max_cond_frames_in_attn=-1,
         # on the first frame, whether to directly add the no-memory embedding to the image feature

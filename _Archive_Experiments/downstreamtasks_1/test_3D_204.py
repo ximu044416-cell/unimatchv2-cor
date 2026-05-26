@@ -20,7 +20,7 @@ def reconstruct_3d_volumes():
     # 坚决使用巅峰权重
     WEIGHT_PATH = os.path.join(config.OUTPUT_DIR, "best_model.pth")
 
-    # 🔥 你的要求：输出路径设定为 F:\radiomics
+    # 🔥 你的要求：输出路径设定为 F:\test
     OUTPUT_3D_DIR = r"F:\radiomics"
     os.makedirs(OUTPUT_3D_DIR, exist_ok=True)
 
@@ -128,7 +128,7 @@ def reconstruct_3d_volumes():
             vol_pred = np.stack(patient_preds, axis=0)
             vol_gt = np.stack(patient_gts, axis=0)
 
-            # 🔥 6. 为每个患者创建专属子文件夹，存放进 F:\radiomics
+            # 🔥 6. 为每个患者创建专属子文件夹，存放进 F:\test
             patient_output_dir = os.path.join(OUTPUT_3D_DIR, patient_id)
             os.makedirs(patient_output_dir, exist_ok=True)
 

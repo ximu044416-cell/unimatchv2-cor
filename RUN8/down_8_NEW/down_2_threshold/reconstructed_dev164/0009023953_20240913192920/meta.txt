@@ -1,0 +1,3 @@
+Patient_ID: 0009023953_20240913192920
+Source_Split: unlabel
+Num_Slices: 20

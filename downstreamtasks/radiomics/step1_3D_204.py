@@ -87,7 +87,7 @@ def reconstruct_3d_volumes_strict_split():
             else:
                 split_folder = "test"
 
-            # 最终的专属存放路径，例如：F:\downstreamtasks\radiomics\train\Patient_XX
+            # 最终的专属存放路径，例如：F:\downstreamtasks\test\train\Patient_XX
             patient_output_dir = os.path.join(OUTPUT_3D_DIR, split_folder, patient_id)
             os.makedirs(patient_output_dir, exist_ok=True)
 

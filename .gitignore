@@ -10,3 +10,22 @@ logs/
 # 忽略 PyCharm 等编辑器的缓存配置文件
 .idea/
 __pycache__/
+
+# 拦截所有核磁/CT图像数据
+*.nii
+*.nii.gz
+
+# 拦截体积较大的表格和压缩包数据
+*.xlsx
+*.npz
+*.csv
+
+# 拦截所有数组和模型文件
+*.npy
+*.pkl
+
+# 拦截所有超大高清无损图片
+*.tif
+*.tiff
+
+downstreamtasks/

@@ -22,7 +22,7 @@ def find_best_threshold():
     BASE_DIR = r"F:\check"
     # 我们遍历 check 下的 train 和 test (通常寻优只看验证/训练集，但为了全局视角，我们全算)
     splits = ["train", "test"]
-    thresholds = [0.65, 0.66, 0.67, 0.68, 0.69, 0.70, 0.71, 0.72, 0.73, 0.74, 0.75]
+    thresholds = [0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95]
 
     # 记录每个阈值下的所有病人的 Dice
     results_dict = {t: [] for t in thresholds}

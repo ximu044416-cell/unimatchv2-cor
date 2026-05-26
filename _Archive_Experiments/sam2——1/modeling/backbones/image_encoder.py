@@ -66,7 +66,7 @@ class FpnNeck(nn.Module):
         """Initialize the neck
         :param trunk: the backbone
         :param position_encoding: the positional encoding to use
-        :param d_model: the dimension of the model
+        :param d_model: the dimension of the models
         :param neck_norm: the normalization to use
         """
         super().__init__()
@@ -151,7 +151,7 @@ class ViTDetNeck(nn.Module):
 
         :param trunk: the backbone
         :param position_encoding: the positional encoding to use
-        :param d_model: the dimension of the model
+        :param d_model: the dimension of the models
         :param neck_norm: the normalization to use
         """
         super().__init__()

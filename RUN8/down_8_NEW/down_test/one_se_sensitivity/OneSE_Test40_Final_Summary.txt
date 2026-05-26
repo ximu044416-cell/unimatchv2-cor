@@ -1,0 +1,23 @@
+1-SE LASSO sensitivity analysis under final strict protocol
+================================================================================
+CV-optimal alpha: 0.02595024
+1-SE alpha      : 0.07924829
+MWU features    : 901
+Spearman features: 163
+Final features  : 6
+Locked cutoff   : 0.344468
+Healthy min Rad : -0.036523
+Note            : Standard 1-SE alpha selected.
+
+        Path    AUC   ACC  SEN  SPE  Rescue_N  Failed_Extraction_N  MaskEmpty_N  All_Zero_Features_N   HL_stat     HL_p  HL_groups  Spearman_RadScore_vs_SPARCC_r  Spearman_RadScore_vs_SPARCC_p  DeLong_P_vs_GT
+      GT_1SE 0.9500 0.875 0.75  1.0         0                    0            0                    0 23.432091 0.002852         10                       0.762049                   1.115049e-08             NaN
+Pred_080_1SE 0.9875 0.875 0.75  1.0         9                    0            9                    9 24.667679 0.001769         10                       0.777239                   3.680394e-09         0.15462
+Pred_075_1SE 0.9875 0.875 0.75  1.0         9                    0            9                    9 24.253998 0.002077         10                       0.781774                   2.599427e-09         0.15462
+
+Selected features:
+original_shape_MeshVolume	0.00749197
+original_shape_SurfaceVolumeRatio	-0.12650879
+log-sigma-2-0-mm-3D_firstorder_Minimum	-0.00969970
+wavelet-LLH_firstorder_Maximum	0.01752441
+wavelet-LLH_glcm_MCC	-0.09558693
+wavelet-LLH_glszm_LargeAreaHighGrayLevelEmphasis	0.00954093

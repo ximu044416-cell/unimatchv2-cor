@@ -180,7 +180,7 @@ def load_video_frames(
 ):
     """
     Load the video frames from video_path. The frames are resized to image_size as in
-    the model and are loaded to GPU if offload_video_to_cpu=False. This is used by the demo.
+    the models and are loaded to GPU if offload_video_to_cpu=False. This is used by the demo.
     """
     is_bytes = isinstance(video_path, bytes)
     is_str = isinstance(video_path, str)

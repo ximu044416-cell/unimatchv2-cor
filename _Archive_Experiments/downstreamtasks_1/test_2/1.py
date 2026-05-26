@@ -22,13 +22,13 @@ def reconstruct_3d_volumes_greedy_strict():
     # 新的输出阵地
     OUTPUT_BASE_DIR = r"F:\check"
     # 🔥 绝对金标准：你之前手工划分的阵地
-    REFERENCE_DIR = r"F:\radiomics"
+    REFERENCE_DIR = r"F:\downstreamtasks\radiomics"
 
     os.makedirs(os.path.join(OUTPUT_BASE_DIR, "train"), exist_ok=True)
     os.makedirs(os.path.join(OUTPUT_BASE_DIR, "test"), exist_ok=True)
 
     # 网格化阈值 (0.50 ~ 0.95, 间隔 0.05)
-    thresholds = [0.65, 0.66, 0.67, 0.68, 0.69, 0.70, 0.71, 0.72, 0.73, 0.74, 0.75]
+    thresholds = [0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95]
 
     print(f"🚀 启动 3D 贪婪多阈值重建引擎 (严格镜像模式)...")
 

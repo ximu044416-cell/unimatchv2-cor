@@ -37,7 +37,7 @@ SEED = 42
 BATCH_SIZE = 4
 NUM_WORKERS = 4
 TOTAL_EPOCHS = 1500  # 从 train.py 移入并统一管理
-PATIENCE = 500       # 🔥 早停容忍度，移入 config 统一管理
+PATIENCE = 500    # 🔥 早停容忍度，移入 config 统一管理
 
 # 🔥 [战术修改 1] 强力正则化，防 Base 模型过拟合 (1e-4 -> 0.05)
 WEIGHT_DECAY = 0.05

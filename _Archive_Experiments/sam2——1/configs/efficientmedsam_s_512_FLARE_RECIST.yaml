@@ -76,7 +76,7 @@ trainer:
   seed_value: 123
 
   model:
-    _target_: training.model.efficienttam.EfficientTAMTrain
+    _target_: training.models.efficienttam.EfficientTAMTrain
     image_encoder:
       _target_: sam2.modeling.backbones.image_encoder.ImageEncoder
       scalp: 0
@@ -337,7 +337,7 @@ trainer:
       state_dict:
         _target_: training.utils.checkpoint_utils.load_checkpoint_and_apply_kernels
         checkpoint_path: checkpoints/efficienttam_s_512x512.pt
-        ckpt_state_dict_keys: ['model']
+        ckpt_state_dict_keys: ['models']
 
 launcher:
   num_nodes: 1

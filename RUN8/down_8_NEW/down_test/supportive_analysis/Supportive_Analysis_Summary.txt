@@ -1,0 +1,10 @@
+RUN8 test40 supportive analysis
+========================================================================
+
+Hosmer-Lemeshow results:
+GT: AUC=0.9575, HL=20.8955, P=0.0074, groups=10, Spearman_r=0.7383, Spearman_p=5.4131e-08
+Pred_080: AUC=0.9800, HL=32.1815, P=0.0001, groups=10, Spearman_r=0.8102, Spearman_p=2.3939e-10
+Pred_075: AUC=0.9800, HL=30.7095, P=0.0002, groups=10, Spearman_r=0.8018, Spearman_p=5.0419e-10
+
+DeLong P (Pred_080 vs GT) = 0.240687
+DeLong P (Pred_075 vs GT) = 0.240687

@@ -56,24 +56,24 @@ class SAM2AutomaticMaskGenerator:
         **kwargs,
     ) -> None:
         """
-        Using a SAM 2 model, generates masks for the entire image.
+        Using a SAM 2 models, generates masks for the entire image.
         Generates a grid of point prompts over the image, then filters
         low quality and duplicate masks. The default settings are chosen
         for SAM 2 with a HieraL backbone.
 
         Arguments:
-          model (Sam): The SAM 2 model to use for mask prediction.
+          model (Sam): The SAM 2 models to use for mask prediction.
           points_per_side (int or None): The number of points to be sampled
             along one side of the image. The total number of points is
             points_per_side**2. If None, 'point_grids' must provide explicit
             point sampling.
           points_per_batch (int): Sets the number of points run simultaneously
-            by the model. Higher numbers may be faster but use more GPU memory.
+            by the models. Higher numbers may be faster but use more GPU memory.
           pred_iou_thresh (float): A filtering threshold in [0,1], using the
-            model's predicted mask quality.
+            models's predicted mask quality.
           stability_score_thresh (float): A filtering threshold in [0,1], using
             the stability of the mask under changes to the cutoff used to binarize
-            the model's mask predictions.
+            the models's mask predictions.
           stability_score_offset (float): The amount to shift the cutoff when
             calculated the stability score.
           mask_threshold (float): Threshold for binarizing the mask logits
@@ -152,14 +152,14 @@ class SAM2AutomaticMaskGenerator:
     @classmethod
     def from_pretrained(cls, model_id: str, **kwargs) -> "SAM2AutomaticMaskGenerator":
         """
-        Load a pretrained model from the Hugging Face hub.
+        Load a pretrained models from the Hugging Face hub.
 
         Arguments:
           model_id (str): The Hugging Face repository ID.
-          **kwargs: Additional arguments to pass to the model constructor.
+          **kwargs: Additional arguments to pass to the models constructor.
 
         Returns:
-          (SAM2AutomaticMaskGenerator): The loaded model.
+          (SAM2AutomaticMaskGenerator): The loaded models.
         """
         from sam2.build_sam import build_sam2_hf
 
@@ -182,10 +182,10 @@ class SAM2AutomaticMaskGenerator:
                  is a dictionary containing the RLE.
                bbox (list(float)): The box around the mask, in XYWH format.
                area (int): The area in pixels of the mask.
-               predicted_iou (float): The model's own prediction of the mask's
+               predicted_iou (float): The models's own prediction of the mask's
                  quality. This is filtered by the pred_iou_thresh parameter.
                point_coords (list(list(float))): The point coordinates input
-                 to the model to generate this mask.
+                 to the models to generate this mask.
                stability_score (float): A measure of the mask's quality. This
                  is filtered on using the stability_score_thresh parameter.
                crop_box (list(float)): The crop of the image used to generate
@@ -301,7 +301,7 @@ class SAM2AutomaticMaskGenerator:
     ) -> MaskData:
         orig_h, orig_w = orig_size
 
-        # Run model on this batch
+        # Run models on this batch
         points = torch.as_tensor(
             points, dtype=torch.float32, device=self.predictor.device
         )

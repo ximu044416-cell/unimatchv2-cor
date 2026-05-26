@@ -1,0 +1,29 @@
+{
+  "alpha_min": 0.025950242113997372,
+  "alpha_1se": 0.07924828983539177,
+  "mse_min": 0.11732862044212933,
+  "se_min": 0.01191200504305907,
+  "n_mwu_features": 901,
+  "n_spearman_features": 163,
+  "n_final_features": 6,
+  "selected_features": [
+    "original_shape_MeshVolume",
+    "original_shape_SurfaceVolumeRatio",
+    "log-sigma-2-0-mm-3D_firstorder_Minimum",
+    "wavelet-LLH_firstorder_Maximum",
+    "wavelet-LLH_glcm_MCC",
+    "wavelet-LLH_glszm_LargeAreaHighGrayLevelEmphasis"
+  ],
+  "coef_dict": {
+    "original_shape_MeshVolume": 0.00749197000016013,
+    "original_shape_SurfaceVolumeRatio": -0.12650878585597936,
+    "log-sigma-2-0-mm-3D_firstorder_Minimum": -0.0096996994789845,
+    "wavelet-LLH_firstorder_Maximum": 0.017524410936703767,
+    "wavelet-LLH_glcm_MCC": -0.09558693368988323,
+    "wavelet-LLH_glszm_LargeAreaHighGrayLevelEmphasis": 0.009540931428578116
+  },
+  "lasso_intercept": 0.304878048780488,
+  "locked_cutoff": 0.3444681367021743,
+  "healthy_min_radscore": -0.036523472215097094,
+  "note": "Standard 1-SE alpha selected."
+}

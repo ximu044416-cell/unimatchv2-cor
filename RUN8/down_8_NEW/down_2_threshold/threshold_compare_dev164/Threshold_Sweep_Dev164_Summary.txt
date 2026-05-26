@@ -1,0 +1,11 @@
+RUN8 dev164 downstream threshold comparison
+======================================================================
+GT baseline AUC: 0.9519
+GT baseline ACC: 0.9207
+GT baseline SEN: 0.9200
+GT baseline SPE: 0.9211
+Locked cutoff   : 0.353582
+
+Threshold sweep results are in Threshold_Sweep_Dev164.csv
+Use this dev164-only comparison to freeze the final deployment threshold,
+then evaluate once on test40.
